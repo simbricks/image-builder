@@ -1,12 +1,10 @@
 # SimBricks image harness
 
 A tiny, simulator-independent way to **generate** the Linux disk image and boot
-artifacts SimBricks needs. It builds nothing you have to host: you publish text
-(this repo), the user runs `packer build`, and one disk image plus its boot
-files fall out on their machine.
+artifacts SimBricks needs. One disk image plus its boot files fall out.
 
 No kernel is compiled anywhere. The kernel is the distro's own; the ELF
-`vmlinux` gem5 needs is just the distro's debug-kernel package, extracted.
+`vmlinux` e.g. gem5 needs is just the distro's debug-kernel package, extracted.
 
 ## What it produces
 
@@ -24,8 +22,8 @@ live *inside* that image, provided pre-extracted so simulators can be handed a
 kernel/initrd on the command line (e.g. to override the kernel cmdline per run)
 without needing virt-tools at simulation time.
 
-With `-var extract_headers=true` (`make image EXTRACT_HEADERS=true`) two more
-outputs appear — an opt-in escape hatch for building out-of-tree modules on the
+With `-var extract_headers=true` (`make image EXTRACT_HEADERS=true`) kernel config
+and headers are extracted as well, for building out-of-tree modules on the
 host (normally components build their modules in packer instead; see below):
 
 ```
@@ -36,9 +34,8 @@ output-base/
 
 ## Requirements (host)
 
-- `packer` (with the qemu plugin — `make init` installs it)
-- a stock `qemu-system-x86_64` and `qemu-img` (NOT the SimBricks fork — image
-  building needs no fork features). KVM strongly recommended.
+- `packer` (with the qemu plugin; `make init` installs it)
+- a stock `qemu-system-x86_64` and `qemu-img`. KVM recommended.
 - `libguestfs-tools` (Debian/Ubuntu) or `guestfs-tools` (Fedora) for
   `virt-copy-out` / `virt-ls`.
 
@@ -95,13 +92,13 @@ packer build \
   -var 'scripts=["scripts/install-base.sh",
                  "scripts/configure-boot.sh",
                  "scripts/install-guestinit.sh",
-                 "../simbricks-gem5/packer/install-m5.sh",
-                 "../simbricks-corundum/packer/install-mqnic.sh"]' \
+                 "path/to/another/install/script.sh",
+                 "path/to/yet/one/additional/install/script.sh"]' \
   image.pkr.hcl
 ```
 
-The gem5 ELF `vmlinux` and the optional headers/config extraction are not stages
-— they are harness-owned plumbing (`scripts/install-boot-artifacts.sh` in the
+The ELF `vmlinux` and the optional headers/config extraction are not stages,
+they are harness-owned plumbing (`scripts/install-boot-artifacts.sh` in the
 guest, `scripts/extract-boot-artifacts.sh` on the host), controlled by
 `-var install_vmlinux=` (default true) and `-var extract_headers=` (default
 false).
@@ -110,21 +107,11 @@ Because cleanup runs last, those scripts can pull in `build-essential`,
 `linux-headers-$(uname -r)`, etc.; cleanup removes them afterward. Any step that
 changes the kernel must run *before* driver builds.
 
-Example component scripts are in `examples/component-scripts/`. In the real
-layout they live in the component repos (versioned with the thing they must
-match) and can be shipped inside the component's conda package, e.g. under
-`$CONDA_PREFIX/share/simbricks/<component>/packer/`.
+### one-shot
 
-### Layering vs. one-shot
-
-Two equivalent styles:
-
-- **One-shot:** list base + all component scripts in a single build. With the
-  Makefile, append component scripts via `EXTRA_SCRIPTS`:
-  `make image EXTRA_SCRIPTS="../simbricks-gem5/packer/install-m5.sh"`.
-- **Layered:** build `base.raw`, then feed it back as `source_image` to a second
-  build that adds one component. This mirrors the old base/extended split (run
-  packer directly, pointing `source_image` at the previous `output-*/*.raw`).
+List base + all component scripts in a single build. With the
+Makefile, append component scripts via `EXTRA_SCRIPTS`:
+`make image EXTRA_SCRIPTS="path/to/another/install/script.sh"`.
 
 ## Using the output with the simulators
 
@@ -165,12 +152,6 @@ Once your gem5 fork supports x86 initrd, add:
 > just add `--initrd`. Until then, gem5 needs a kernel that mounts root without
 > an initrd; how you obtain that is a gem5-side concern, not the harness's.
 
-### Corundum note
-
-`install-mqnic.sh` builds the module against the **image's** kernel. On QEMU
-(which boots that same kernel) it loads fine. If you run the image on gem5 with
-a *different* kernel during the initrd-gap period above, the module's vermagic
-won't match that kernel and won't load there.
 
 ## Guest payload protocol
 
@@ -189,6 +170,5 @@ scripts/install-guestinit.sh SimBricks guest payload runner (/dev/sdb -> guest/r
 scripts/cleanup.sh          sanitize + shrink (runs last)
 scripts/install-boot-artifacts.sh harness-owned (guest): install the -dbg kernel + headers
 scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux/config/headers out
-examples/component-scripts  m5/mqnic examples (live in component repos IRL)
 Makefile                    convenience wrappers
 ```
