@@ -1,35 +1,29 @@
-# Convenience wrappers around `packer build`. Everything here is optional — you
-# can invoke packer directly (see README). Override any VAR on the command line:
-#
-#   make image SOURCE_IMAGE=https://.../debian-13-genericcloud-amd64.qcow2 \
-#              SOURCE_CHECKSUM=file:https://.../SHA512SUMS
+# Wrappers around `packer build` (optional — see README). Override any VAR:
+#   make image SOURCE_IMAGE=... SOURCE_CHECKSUM=...
 
 PACKER        ?= packer
-SOURCE_IMAGE  ?= https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
-SOURCE_CHECKSUM ?= file:https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS
+SOURCE_IMAGE  ?= https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img
+SOURCE_CHECKSUM ?= file:https://cloud-images.ubuntu.com/minimal/releases/jammy/release/SHA256SUMS 
 ACCELERATOR   ?= kvm
 
-# Guest stages, run in order (space-separated paths). install-base is your
-# software; configure-boot trims the GRUB delay; install-guestinit is the
-# SimBricks payload runner. The kernel/boot artifacts (gem5's vmlinux, headers)
-# are harness-owned and controlled by the flags below, not stages.
-BASE_SCRIPTS  ?= scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh
+# Image name (disk filename stem) + output dir. Override to chain specializations
+# off a prebuilt base: build once with NAME=base, then reuse it as SOURCE_IMAGE.
+NAME          ?= base
+OUTPUT        ?= output-$(NAME)
 
-# Extra component stages appended after the base ones. Point these at the
-# component repos' install scripts, e.g.:
-#   make image EXTRA_SCRIPTS="../simbricks-gem5/packer/install-m5.sh"
+# Base stages, then extra component scripts, run in order. install-boot-artifacts.sh
+# (generic kernel + vmlinux) comes first; clear BASE_SCRIPTS to reuse a base image.
+BASE_SCRIPTS  ?= scripts/install-boot-artifacts.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh
 EXTRA_SCRIPTS ?=
 
-# Install the debug kernel so gem5's ELF boot/vmlinux is produced. On by
-# default; set false for QEMU-only images (skips the large -dbg package).
+# Local dir made available at /tmp/input in the guest, tarred for upload (empty = off).
+INPUT ?=
+INPUT_TAR := $(and $(INPUT),/tmp/simbricks-image-input.tar.gz)
+
+# boot/vmlinux (uncompressed kernel ELF, decompressed from the image); false to skip.
 INSTALL_VMLINUX ?= true
 
-# Extract the kernel config + linux-headers build tree to output-base/ for
-# building out-of-tree modules on the host. Off by default; turning it on also
-# installs the headers into the image (which enlarges it).
-EXTRACT_HEADERS ?= false
-
-# turn a make list into the HCL list literal packer wants
+# make list -> HCL list literal
 comma := ,
 empty :=
 space := $(empty) $(empty)
@@ -40,19 +34,21 @@ VARS = \
   -var source_checksum=$(SOURCE_CHECKSUM) \
   -var accelerator=$(ACCELERATOR) \
   -var install_vmlinux=$(INSTALL_VMLINUX) \
-  -var extract_headers=$(EXTRACT_HEADERS) \
-  -var name=base -var output=output-base \
+  -var input=$(INPUT_TAR) \
+  -var name=$(NAME) -var output=$(OUTPUT) \
   -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'
 
-.PHONY: image validate init clean
+.PHONY: image validate init clean pack-input
 
-# cloud image -> image (init -> validate -> build). Validating first catches
-# HCL/variable mistakes before packer downloads an image and boots a VM.
+# tar INPUT (if set) so the file provisioner's source exists before packer runs
+pack-input:
+	$(if $(INPUT),tar czf $(INPUT_TAR) -C $(INPUT) .)
+
+# init -> validate -> build
 image: validate
 	$(PACKER) build $(VARS) image.pkr.hcl
 
-# validate the config/vars without building anything
-validate: init
+validate: init pack-input
 	$(PACKER) validate $(VARS) image.pkr.hcl
 
 init:
