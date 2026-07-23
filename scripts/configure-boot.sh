@@ -1,7 +1,7 @@
 #!/bin/bash -eux
 #
 # Boot-speed tweaks for the generated image: no OS prober, no GRUB menu delay
-# (every simulator boot should go straight to the kernel).
+# (boot should go straight to the kernel).
 
 set -eux
 

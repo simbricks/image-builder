@@ -1,8 +1,7 @@
 #!/bin/bash -eux
 #
-# Runs LAST, after every component script, so build dependencies that were only
-# needed to compile things (m5, mqnic, ...) can be removed here. Also sanitizes
-# identity/logs and trims free space so the raw conversion stays sparse.
+# Runs last: remove build deps, sanitize identity/logs, fstrim so the raw
+# conversion stays sparse.
 
 set -eux
 export DEBIAN_FRONTEND=noninteractive

@@ -1,31 +1,25 @@
 #!/bin/sh
 #
-# Harness-owned, guest side. Installs the kernel packages whose files
-# extract-boot-artifacts.sh later copies out of the image. Gated by env flags:
-#   WITH_VMLINUX=true   install the -dbg kernel (ships the ELF vmlinux)
-#   WITH_HEADERS=true   install the linux-headers build tree (for host module builds)
-#
-# No kernel is built here; both are the distro's own packages.
-set -eu
-
-WITH_VMLINUX="${WITH_VMLINUX:-true}"
-WITH_HEADERS="${WITH_HEADERS:-false}"
+# Harness-owned (guest), runs before the component scripts: boot the full `generic`
+# kernel instead of the stripped cloud/-kvm one (drivers like mqnic need config
+# -kvm lacks, e.g. I2C), then decompress the ELF vmlinux for the host to copy out.
+set -eux
 export DEBIAN_FRONTEND=noninteractive
-set -x
 
-KVER=$(uname -r)
 apt-get update
+apt-get install -y --no-install-recommends linux-generic
+kvm=$(dpkg-query -W -f='${Package}\n' 'linux-*-kvm' 2>/dev/null || true)
+[ -n "$kvm" ] && apt-get purge -y $kvm
+update-grub
 
-# ELF vmlinux for gem5: the -dbg package ships /usr/lib/debug/boot/vmlinux-$KVER.
-if [ "$WITH_VMLINUX" = true ]; then
-    if ! apt-get install -y --no-install-recommends "linux-image-${KVER}-dbg"; then
-        echo "WARN: no linux-image-${KVER}-dbg available; boot/vmlinux will be missing" >&2
-        echo "WARN: gem5 host components will not be able to use this image"            >&2
-    fi
-fi
-
-# linux-headers build tree, kept in the image only so it can be extracted for
-# building out-of-tree modules on the host (enlarges the image).
-if [ "$WITH_HEADERS" = true ]; then
-    apt-get install -y --no-install-recommends "linux-headers-${KVER}"
+# Decompress the ELF vmlinux into /usr/lib/debug/boot, where extract-boot-artifacts.sh
+# copies it out. extract-vmlinux ships in the linux-headers that linux-generic pulled
+# in; binutils + the compressors are what it uses to unpack the kernel image.
+if [ "${WITH_VMLINUX:-true}" = true ]; then
+    kver=$(ls /boot/vmlinuz-* | sed 's|.*/vmlinuz-||' | sort -V | tail -1)
+    apt-get install -y --no-install-recommends binutils xz-utils zstd lz4
+    ev=$(ls /usr/src/linux-headers-*/scripts/extract-vmlinux | head -1)
+    mkdir -p /usr/lib/debug/boot
+    sh "$ev" "/boot/vmlinuz-$kver" > "/usr/lib/debug/boot/vmlinux-$kver"
+    [ -s "/usr/lib/debug/boot/vmlinux-$kver" ] || rm -f "/usr/lib/debug/boot/vmlinux-$kver"
 fi
