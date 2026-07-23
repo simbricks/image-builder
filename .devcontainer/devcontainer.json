@@ -1,14 +1,11 @@
 {
   "name": "SimBricks image harness",
-  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "build": { "dockerfile": "Dockerfile" },
 
   // Pass the host's KVM device through for hardware-accelerated builds.
   // If your host has no /dev/kvm, remove this line and build with
-  // `-var accelerator=tcg` (packer) / `make base ACCELERATOR=tcg`.
+  // `-var accelerator=tcg` (packer) / `make image ACCELERATOR=tcg`.
   "runArgs": ["--device=/dev/kvm"],
-
-  // Install the harness tooling into the prebuilt image (once, as root).
-  "onCreateCommand": "sudo bash .devcontainer/setup.sh",
 
   // A pass-through device keeps the host's group ownership, so the container
   // user can't access it by default; make it usable on each start.
