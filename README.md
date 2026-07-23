@@ -14,23 +14,13 @@ output-base/
   boot/
     vmlinuz         # distro kernel, bzImage   -> QEMU  -kernel   (optional)
     initrd          # distro initramfs         -> QEMU  -initrd / future gem5
-    vmlinux         # distro kernel, ELF        -> gem5  --kernel  (if -dbg pkg present)
+    vmlinux         # distro kernel, ELF        -> gem5  --kernel  (if install_vmlinux)
 ```
 
 `base.raw` is the single artifact. `boot/*` are extracted copies of files that
 live *inside* that image, provided pre-extracted so simulators can be handed a
 kernel/initrd on the command line (e.g. to override the kernel cmdline per run)
 without needing virt-tools at simulation time.
-
-With `-var extract_headers=true` (`make image EXTRACT_HEADERS=true`) kernel config
-and headers are extracted as well, for building out-of-tree modules on the
-host (normally components build their modules in packer instead; see below):
-
-```
-output-base/
-  boot/config       # kernel .config
-  headers/          # linux-headers build tree
-```
 
 ## Requirements (host)
 
@@ -41,10 +31,10 @@ output-base/
 
 ## Dev container
 
-`.devcontainer/` installs all of the above (stock qemu, libguestfs, packer,
-make/git) into a prebuilt base image via
-[.devcontainer/setup.sh](.devcontainer/setup.sh), so you can build without
-touching the host. Open the repo in VS Code and "Reopen in Container".
+`.devcontainer/` builds an image with all of the above (stock qemu, libguestfs,
+packer, make/git) via [.devcontainer/Dockerfile](.devcontainer/Dockerfile), so
+you can build without touching the host. Open the repo in VS Code and "Reopen in
+Container".
 
 It passes the host's `/dev/kvm` through for accelerated builds. If your host has
 no KVM, remove the `--device=/dev/kvm` runArg from
@@ -68,50 +58,82 @@ packer build \
   -var source_image=https://.../debian-13-genericcloud-amd64.qcow2 \
   -var source_checksum=file:https://.../SHA512SUMS \
   -var name=base -var output=output-base \
-  -var 'scripts=["scripts/install-base.sh","scripts/configure-boot.sh","scripts/install-guestinit.sh"]' \
+  -var 'scripts=["scripts/install-boot-artifacts.sh","scripts/install-base.sh","scripts/configure-boot.sh","scripts/install-guestinit.sh"]' \
   image.pkr.hcl
 ```
 
 On CI without nested virtualization, add `-var accelerator=tcg` (slower). The
 gem5 ELF `vmlinux` is produced by default (`install_vmlinux=true`); set
-`-var install_vmlinux=false` for QEMU-only images to skip the large `-dbg`
-package.
+`-var install_vmlinux=false` for QEMU-only images to skip the vmlinux step.
 
 ## How components plug in
 
 The template runs an ordered list of opaque shell `scripts` in the guest, then
-runs the harness-owned kernel/boot plumbing and `scripts/cleanup.sh`. The base
-stages (`install-base.sh` = your software, `configure-boot.sh` = trim the GRUB
-delay, `install-guestinit.sh` = the SimBricks payload runner) are just the first
-entries; a component (gem5, Corundum, ...) ships its own install script and you
-append it:
+runs `scripts/cleanup.sh`. The base stages — `install-boot-artifacts.sh` (install
+the generic kernel and decompress its `vmlinux`), `install-base.sh` (your
+software), `configure-boot.sh` (trim the GRUB delay), `install-guestinit.sh` (the
+SimBricks payload runner) — are just the first entries; a component (gem5,
+Corundum, ...) ships its own install script and you append it:
 
 ```sh
 packer build \
   -var name=base -var output=output-base \
-  -var 'scripts=["scripts/install-base.sh",
+  -var 'scripts=["scripts/install-boot-artifacts.sh",
+                 "scripts/install-base.sh",
                  "scripts/configure-boot.sh",
                  "scripts/install-guestinit.sh",
-                 "path/to/another/install/script.sh",
-                 "path/to/yet/one/additional/install/script.sh"]' \
+                 "path/to/another/install/script.sh"]' \
   image.pkr.hcl
 ```
 
-The ELF `vmlinux` and the optional headers/config extraction are not stages,
-they are harness-owned plumbing (`scripts/install-boot-artifacts.sh` in the
-guest, `scripts/extract-boot-artifacts.sh` on the host), controlled by
-`-var install_vmlinux=` (default true) and `-var extract_headers=` (default
-false).
+`install-boot-artifacts.sh` runs first so components build against the generic
+kernel it installs; the ELF `vmlinux` it decompresses is copied out on the host by
+`scripts/extract-boot-artifacts.sh` (controlled by `-var install_vmlinux=`, default
+true). When you build a specialization on top of a prebuilt base image, drop the
+base scripts (`install-boot-artifacts.sh` included) from the list — the kernel and
+its `vmlinux` are already in the base, so there is nothing to redo.
 
-Because cleanup runs last, those scripts can pull in `build-essential`,
-`linux-headers-$(uname -r)`, etc.; cleanup removes them afterward. Any step that
-changes the kernel must run *before* driver builds.
+Because cleanup runs last, component scripts can pull in `build-essential`,
+`linux-headers-*`, etc.; cleanup removes them afterward.
+
+### Getting build input to a script
+
+A component script usually **fetches its own input** — `git clone` a pinned ref,
+`curl` a release — from inside the guest (the VM has network, and the
+`http_proxy`/`https_proxy` vars are forwarded). That is the recommended way and
+keeps builds reproducible when you pin the ref.
+
+For local, unpublished input (a working tree, patches, prebuilt blobs), upload it
+instead: `make image INPUT=<dir>` tars the directory and unpacks it to
+`/tmp/input` in the guest before the scripts run, where your script reads it.
+With plain packer, pass a tarball via `-var input=<file.tar.gz>` (packer can't
+tar it for you — the file source is checked before any provisioner runs).
 
 ### one-shot
 
 List base + all component scripts in a single build. With the
 Makefile, append component scripts via `EXTRA_SCRIPTS`:
 `make image EXTRA_SCRIPTS="path/to/another/install/script.sh"`.
+
+### layered (reuse a base)
+
+Build the base once, then build several specializations on top of it without
+redoing the base stages (generic kernel, packages, ...). Point `SOURCE_IMAGE` at
+the base image a previous run produced and clear `BASE_SCRIPTS` so only your
+component runs:
+
+```sh
+make image                                   # 1. build the base once -> output-base/base
+
+make image NAME=you-nre-image-name \                   # 2. specialize on top of it
+  SOURCE_IMAGE=output-base/base SOURCE_CHECKSUM=none \
+  BASE_SCRIPTS= EXTRA_SCRIPTS="path/to/your/specific/install/script.sh"
+```
+
+The base keeps the generic kernel + its `vmlinux` through cleanup, so the
+specialization reuses them and just extracts its own `boot/` artifacts.
+`SOURCE_CHECKSUM=none` is needed because the default checksum is for the cloud
+image, not your local base.
 
 ## Using the output with the simulators
 
@@ -164,11 +186,11 @@ disk (`/dev/sdb`); the guest untars it and runs `guest/run.sh`.
 ```
 image.pkr.hcl               the single template
 http/{user-data,meta-data}  cloud-init NoCloud seed
-scripts/install-base.sh     the packages you want in the image
-scripts/configure-boot.sh   trim the GRUB menu delay for fast simulator boots
-scripts/install-guestinit.sh SimBricks guest payload runner (/dev/sdb -> guest/run.sh)
+scripts/install-boot-artifacts.sh base stage (guest): install the generic kernel + decompress its vmlinux
+scripts/install-base.sh     base stage: the packages you want in the image
+scripts/configure-boot.sh   base stage: trim the GRUB menu delay for fast boots
+scripts/install-guestinit.sh base stage: SimBricks guest payload runner (/dev/sdb -> guest/run.sh)
+scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux out
 scripts/cleanup.sh          sanitize + shrink (runs last)
-scripts/install-boot-artifacts.sh harness-owned (guest): install the -dbg kernel + headers
-scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux/config/headers out
 Makefile                    convenience wrappers
 ```
