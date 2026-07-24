@@ -3,8 +3,10 @@
 A tiny, simulator-independent way to **generate** the Linux disk image and boot
 artifacts SimBricks needs. One disk image plus its boot files fall out.
 
-No kernel is compiled anywhere. The kernel is the distro's own; the ELF
-`vmlinux` e.g. gem5 needs is just the distro's debug-kernel package, extracted.
+By default no kernel is compiled: the kernel is the distro's own, and the ELF
+`vmlinux` e.g. gem5 needs is just its debug-kernel package, extracted. gem5 boots
+without an initrd, so it has an optional path that builds a custom no-initrd
+kernel instead — see [gem5: custom no-initrd kernel](#gem5-custom-no-initrd-kernel).
 
 ## What it produces
 
@@ -135,6 +137,25 @@ specialization reuses them and just extracts its own `boot/` artifacts.
 `SOURCE_CHECKSUM=none` is needed because the default checksum is for the cloud
 image, not your local base.
 
+### gem5: custom no-initrd kernel
+
+gem5's current fork boots a `vmlinux` with no initrd, so the distro's modular
+kernel won't reach userspace (see the caveat under [gem5](#gem5)). `examples/gem5/`
+builds one that does — root fs, disk and serial console built in — outside packer:
+
+```sh
+make gem5-kernel                         # -> output/gem5-kernel/{vmlinux,linux-*.deb}
+make image NAME=gem5 INPUT=output/gem5-kernel \
+  BASE_SCRIPTS="examples/gem5/install-gem5-kernel.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh" \
+  EXTRA_SCRIPTS="examples/corundum/install-mqnic.sh"
+```
+
+`install-gem5-kernel.sh` replaces `install-boot-artifacts.sh`: it installs the
+built kernel handed in via `INPUT` (`/tmp/input`) instead of the generic one.
+Version and config live in `examples/gem5/build-gem5-kernel.sh`. Out-of-tree
+drivers (the Corundum `mqnic` stage above) then build against it under
+`/lib/modules/<ver>/build`.
+
 ## Using the output with the simulators
 
 ### QEMU
@@ -172,7 +193,8 @@ Once your gem5 fork supports x86 initrd, add:
 > userspace on it. That gap closes when the fork gains x86 initrd support (via a
 > gem5 upgrade or a workload patch); the harness output does not change — you
 > just add `--initrd`. Until then, gem5 needs a kernel that mounts root without
-> an initrd; how you obtain that is a gem5-side concern, not the harness's.
+> an initrd — build one with `make gem5-kernel` (see
+> [gem5: custom no-initrd kernel](#gem5-custom-no-initrd-kernel)).
 
 
 ## Guest payload protocol
@@ -192,5 +214,7 @@ scripts/configure-boot.sh   base stage: trim the GRUB menu delay for fast boots
 scripts/install-guestinit.sh base stage: SimBricks guest payload runner (/dev/sdb -> guest/run.sh)
 scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux out
 scripts/cleanup.sh          sanitize + shrink (runs last)
+examples/gem5/              optional: build (build-gem5-kernel.sh) + install a custom no-initrd kernel
+examples/corundum/          optional: build the Corundum mqnic driver against it
 Makefile                    convenience wrappers
 ```
