@@ -1,7 +1,6 @@
 #!/bin/bash -eux
 #
-# Base guest software: the packages you want present in the generated image.
-# This is the customization point — edit the list below to taste.
+# Base packages baked into the image — the customization point; edit to taste.
 
 set -eux
 export DEBIAN_FRONTEND=noninteractive

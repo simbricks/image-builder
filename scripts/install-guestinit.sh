@@ -1,9 +1,8 @@
 #!/bin/bash -eux
 #
-# SimBricks guest payload runner (orchestration plumbing, not user software.
-# Orchestration attaches the per-experiment payload as a
-# second disk (/dev/sdb); this installs the hook that untars it and runs
-# guest/run.sh. Kept identical to the old repo so the protocol does not change.
+# SimBricks payload runner (orchestration plumbing, not user software). Orchestration
+# attaches the per-experiment payload as a second disk (/dev/sdb); this installs the
+# hook that untars it and runs guest/run.sh. Protocol kept identical to the old repo.
 
 set -eux
 
