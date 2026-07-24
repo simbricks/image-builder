@@ -6,10 +6,12 @@ SOURCE_IMAGE  ?= https://cloud-images.ubuntu.com/minimal/releases/jammy/release/
 SOURCE_CHECKSUM ?= file:https://cloud-images.ubuntu.com/minimal/releases/jammy/release/SHA256SUMS 
 ACCELERATOR   ?= kvm
 
-# Image name (disk filename stem) + output dir. Override to chain specializations
-# off a prebuilt base: build once with NAME=base, then reuse it as SOURCE_IMAGE.
+# Image name (disk filename stem). Override to chain specializations off a prebuilt
+# base: build once with NAME=base, then reuse it as SOURCE_IMAGE.
 NAME          ?= base
-OUTPUT        ?= output-$(NAME)
+# Top-level output dir; the kernel and each image get their own subfolder under it.
+OUTPUT_DIR    ?= output
+OUTPUT        ?= $(OUTPUT_DIR)/$(NAME)
 
 # Base stages, then extra component scripts, run in order. install-boot-artifacts.sh
 # (generic kernel + vmlinux) comes first; clear BASE_SCRIPTS to reuse a base image.
@@ -38,14 +40,15 @@ VARS = \
   -var name=$(NAME) -var output=$(OUTPUT) \
   -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'
 
-.PHONY: image validate init clean pack-input
+.PHONY: image validate init clean pack-input gem5-kernel
 
 # tar INPUT (if set) so the file provisioner's source exists before packer runs
 pack-input:
 	$(if $(INPUT),tar czf $(INPUT_TAR) -C $(INPUT) .)
 
-# init -> validate -> build
+# init -> validate -> build (packer writes the image into $(OUTPUT_DIR)/$(NAME))
 image: validate
+	mkdir -p $(OUTPUT_DIR)
 	$(PACKER) build $(VARS) image.pkr.hcl
 
 validate: init pack-input
@@ -54,5 +57,14 @@ validate: init pack-input
 init:
 	$(PACKER) init image.pkr.hcl
 
+# `make gem5-kernel`: build the gem5 kernel outside packer into $(KERNEL_OUT); feed
+# it to an image build with INPUT=$(KERNEL_OUT) + install-gem5-kernel.sh.
+KERNEL_VER ?= 5.15.148
+KERNEL_OUT ?= $(OUTPUT_DIR)/gem5-kernel
+
+gem5-kernel:
+	mkdir -p $(OUTPUT_DIR)
+	VER=$(KERNEL_VER) OUT=$(KERNEL_OUT) ./examples/gem5/build-gem5-kernel.sh
+
 clean:
-	rm -rf output-* packer_cache
+	rm -rf $(OUTPUT_DIR) packer_cache
