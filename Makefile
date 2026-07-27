@@ -40,7 +40,7 @@ VARS = \
   -var name=$(NAME) -var output=$(OUTPUT) \
   -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'
 
-.PHONY: image validate init clean pack-input gem5-kernel
+.PHONY: image validate init clean pack-input kernel
 
 # tar INPUT (if set) so the file provisioner's source exists before packer runs
 pack-input:
@@ -60,11 +60,11 @@ init:
 # `make gem5-kernel`: build the gem5 kernel outside packer into $(KERNEL_OUT); feed
 # it to an image build with INPUT=$(KERNEL_OUT) + install-gem5-kernel.sh.
 KERNEL_VER ?= 5.15.148
-KERNEL_OUT ?= $(OUTPUT_DIR)/gem5-kernel
+KERNEL_OUT ?= $(OUTPUT_DIR)/kernel
 
-gem5-kernel:
+kernel:
 	mkdir -p $(OUTPUT_DIR)
-	VER=$(KERNEL_VER) OUT=$(KERNEL_OUT) ./examples/gem5/build-gem5-kernel.sh
+	VER=$(KERNEL_VER) OUT=$(KERNEL_OUT) ./examples/gem5/build-kernel.sh
 
 clean:
 	rm -rf $(OUTPUT_DIR) packer_cache

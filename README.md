@@ -144,15 +144,15 @@ kernel won't reach userspace (see the caveat under [gem5](#gem5)). `examples/gem
 builds one that does — root fs, disk and serial console built in — outside packer:
 
 ```sh
-make gem5-kernel                         # -> output/gem5-kernel/{vmlinux,linux-*.deb}
-make image NAME=gem5 INPUT=output/gem5-kernel \
-  BASE_SCRIPTS="examples/gem5/install-gem5-kernel.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh" \
+make kernel                         # -> output/kernel/{vmlinux,linux-*.deb}
+make image NAME=gem5 INPUT=output/kernel \
+  BASE_SCRIPTS="examples/gem5/install-kernel.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh" \
   EXTRA_SCRIPTS="examples/corundum/install-mqnic.sh"
 ```
 
-`install-gem5-kernel.sh` replaces `install-boot-artifacts.sh`: it installs the
+`install-kernel.sh` replaces `install-boot-artifacts.sh`: it installs the
 built kernel handed in via `INPUT` (`/tmp/input`) instead of the generic one.
-Version and config live in `examples/gem5/build-gem5-kernel.sh`. Out-of-tree
+Version and config live in `examples/gem5/build-kernel.sh`. Out-of-tree
 drivers (the Corundum `mqnic` stage above) then build against it under
 `/lib/modules/<ver>/build`.
 
@@ -193,7 +193,7 @@ Once your gem5 fork supports x86 initrd, add:
 > userspace on it. That gap closes when the fork gains x86 initrd support (via a
 > gem5 upgrade or a workload patch); the harness output does not change — you
 > just add `--initrd`. Until then, gem5 needs a kernel that mounts root without
-> an initrd — build one with `make gem5-kernel` (see
+> an initrd — build one with `make kernel` (see
 > [gem5: custom no-initrd kernel](#gem5-custom-no-initrd-kernel)).
 
 
@@ -214,7 +214,7 @@ scripts/configure-boot.sh   base stage: trim the GRUB menu delay for fast boots
 scripts/install-guestinit.sh base stage: SimBricks guest payload runner (/dev/sdb -> guest/run.sh)
 scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux out
 scripts/cleanup.sh          sanitize + shrink (runs last)
-examples/gem5/              optional: build (build-gem5-kernel.sh) + install a custom no-initrd kernel
+examples/gem5/              optional: build (build-kernel.sh) + install a custom no-initrd kernel
 examples/corundum/          optional: build the Corundum mqnic driver against it
 Makefile                    convenience wrappers
 ```

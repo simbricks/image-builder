@@ -28,11 +28,19 @@ cd "$work/linux-$VER"
 
 make defconfig
 
-scripts/config -d DEBUG_INFO           # no -dbg package; gem5 reads .symtab
-# no-initrd boot path
-scripts/config -e EXT4_FS -e ATA -e ATA_PIIX -e SERIAL_8250 -e SERIAL_8250_CONSOLE
+scripts/config -d DEBUG_INFO           # no -dbg package
+scripts/config -d RANDOMIZE_BASE       # no KASLR: deterministic addrs
+# Root disk built in
+scripts/config -e EXT4_FS -e BLK_DEV_SD \
+               -e ATA -e ATA_PIIX -e SATA_AHCI \
+               -e VIRTIO_BLK -e VIRTIO_PCI \
+               -e SERIAL_8250 -e SERIAL_8250_CONSOLE
 # devlink core (via NETDEVSIM) + PTP clock, for mqnic
 scripts/config -m NETDEVSIM -e PTP_1588_CLOCK
+# SimBricks NIC drivers built in (defconfig lacks i40e)
+scripts/config -e I40E -e E1000
+# vfio-pci for userspace drivers (DPDK)
+scripts/config -e VFIO -e VFIO_PCI
 make olddefconfig
 
 make -j"$(nproc)" bindeb-pkg
