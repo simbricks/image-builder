@@ -110,6 +110,11 @@ variable "https_proxy" {
   default = env("https_proxy")
 }
 
+variable "compressed" {
+  type = bool
+  default = true
+}
+
 # ---- Builder ----------------------------------------------------------------
 
 locals {
@@ -130,6 +135,7 @@ source "qemu" "image" {
   headless         = true
   net_device       = "virtio-net"
   disk_interface   = "virtio"
+  disk_compression = var.compressed
 
   # cloud-init NoCloud seed over packer's HTTP server (via SMBIOS serial), so no
   # CD image and no xorriso/mkisofs on the host.
