@@ -25,6 +25,9 @@ INPUT_TAR := $(and $(INPUT),/tmp/simbricks-image-input.tar.gz)
 # boot/vmlinux (uncompressed kernel ELF, decompressed from the image); false to skip.
 INSTALL_VMLINUX ?= true
 
+# Convert the built qcow2 to <output>/<name>.raw; false keeps only the qcow2.
+CONVERT_RAW ?= false
+
 # make list -> HCL list literal
 comma := ,
 empty :=
@@ -36,6 +39,7 @@ VARS = \
   -var source_checksum=$(SOURCE_CHECKSUM) \
   -var accelerator=$(ACCELERATOR) \
   -var install_vmlinux=$(INSTALL_VMLINUX) \
+  -var convert_raw=$(CONVERT_RAW) \
   -var input=$(INPUT_TAR) \
   -var name=$(NAME) -var output=$(OUTPUT) \
   -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'

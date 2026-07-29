@@ -66,7 +66,9 @@ packer build \
 
 On CI without nested virtualization, add `-var accelerator=tcg` (slower). The
 gem5 ELF `vmlinux` is produced by default (`install_vmlinux=true`); set
-`-var install_vmlinux=false` for QEMU-only images to skip the vmlinux step.
+`-var install_vmlinux=false` for QEMU-only images to skip the vmlinux step. The
+qcow2 is converted to `<output>/<name>.raw` by default (`convert_raw=true`); set
+`-var convert_raw=false` (`make image CONVERT_RAW=false`) to keep only the qcow2.
 
 ## How components plug in
 

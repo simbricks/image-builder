@@ -93,6 +93,12 @@ variable "install_vmlinux" {
   default = true
 }
 
+# Convert the built qcow2 to raw (<output>/<name>.raw); false keeps only the qcow2.
+variable "convert_raw" {
+  type = bool
+  default = false
+}
+
 # Forwarded into the guest provisioners; default off the host env, empty = none.
 variable "http_proxy" {
   type = string
@@ -184,11 +190,14 @@ build {
     execute_command = local.execute_command
   }
 
-  # 3. convert to raw + extract boot artifacts
+  # 3. optionally convert to raw, then extract boot artifacts (from the raw if made,
+  #    else straight from the qcow2 — libguestfs reads either).
   post-processor "shell-local" {
-    inline = [
+    inline = var.convert_raw ? [
       "qemu-img convert -f qcow2 -O raw -S 4k ${var.output}/${var.name} ${var.output}/${var.name}.raw",
       "WITH_VMLINUX=${var.install_vmlinux} sh ./scripts/extract-boot-artifacts.sh ${var.output}/${var.name}.raw ${var.output}"
+    ] : [
+      "WITH_VMLINUX=${var.install_vmlinux} sh ./scripts/extract-boot-artifacts.sh ${var.output}/${var.name} ${var.output}"
     ]
   }
 }
