@@ -8,5 +8,4 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
     iperf iputils-ping lbzip2 netperf netcat-openbsd ethtool tcpdump \
-    pciutils busybox numactl sysbench time \
-    ca-certificates curl git build-essential
+    pciutils time curl

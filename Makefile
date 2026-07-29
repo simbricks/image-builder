@@ -57,14 +57,13 @@ validate: init pack-input
 init:
 	$(PACKER) init image.pkr.hcl
 
-# `make gem5-kernel`: build the gem5 kernel outside packer into $(KERNEL_OUT); feed
-# it to an image build with INPUT=$(KERNEL_OUT) + install-gem5-kernel.sh.
-KERNEL_VER ?= 5.15.148
+# `make kernel`: build linux kernel (pinned 5.15.93) outside packer into
+# $(KERNEL_OUT); feed it to an image build with INPUT=$(KERNEL_OUT) + kernel/install-kernel.sh.
 KERNEL_OUT ?= $(OUTPUT_DIR)/kernel
 
 kernel:
 	mkdir -p $(OUTPUT_DIR)
-	VER=$(KERNEL_VER) OUT=$(KERNEL_OUT) ./examples/gem5/build-kernel.sh
+	OUT=$(KERNEL_OUT) ./kernel/build-kernel.sh
 
 clean:
 	rm -rf $(OUTPUT_DIR) packer_cache

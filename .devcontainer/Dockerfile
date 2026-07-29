@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libguestfs-tools \
         linux-image-generic \
         build-essential \
+        patch \
         git \
         ca-certificates \
         curl \
