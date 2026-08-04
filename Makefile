@@ -17,6 +17,7 @@ OUTPUT        ?= $(OUTPUT_DIR)/$(NAME)
 # (generic kernel + vmlinux) comes first; clear BASE_SCRIPTS to reuse a base image.
 BASE_SCRIPTS  ?= scripts/install-boot-artifacts.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh
 EXTRA_SCRIPTS ?=
+EXTRACT_SCRIPT ?= scripts/extract-boot-artifacts.sh
 
 # Local dir made available at /tmp/input in the guest, tarred for upload (empty = off).
 INPUT ?=
@@ -42,7 +43,8 @@ VARS = \
   -var convert_raw=$(CONVERT_RAW) \
   -var input=$(INPUT_TAR) \
   -var name=$(NAME) -var output=$(OUTPUT) \
-  -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'
+  -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))' \
+  -var extract_script=$(EXTRACT_SCRIPT)
 
 .PHONY: image validate init clean pack-input kernel
 

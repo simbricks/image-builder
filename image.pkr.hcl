@@ -46,6 +46,12 @@ variable "scripts" {
   description = "Guest provisioning scripts, run in order. Components plug in here."
 }
 
+variable "extract_script" {
+  type        = string
+  default     = ""
+  description = "Extraction script run on host to extract from image."
+}
+
 variable "input" {
   type        = string
   default     = ""
@@ -201,9 +207,9 @@ build {
   post-processor "shell-local" {
     inline = var.convert_raw ? [
       "qemu-img convert -f qcow2 -O raw -S 4k ${var.output}/${var.name} ${var.output}/${var.name}.raw",
-      "WITH_VMLINUX=${var.install_vmlinux} sh ./scripts/extract-boot-artifacts.sh ${var.output}/${var.name}.raw ${var.output}"
+      "WITH_VMLINUX=${var.install_vmlinux} sh ${var.extract_script} ${var.output}/${var.name}.raw ${var.output}"
     ] : [
-      "WITH_VMLINUX=${var.install_vmlinux} sh ./scripts/extract-boot-artifacts.sh ${var.output}/${var.name} ${var.output}"
+      "WITH_VMLINUX=${var.install_vmlinux} sh ${var.extract_script} ${var.output}/${var.name} ${var.output}"
     ]
   }
 }
