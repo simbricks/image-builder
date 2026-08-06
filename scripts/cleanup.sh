@@ -14,6 +14,7 @@ rm -rf /tmp/*
 apt-get -y autoremove --purge
 apt-get -y clean
 apt-get -y autoclean
+rm -rf /var/cache/apt
 rm -rf /var/lib/apt/lists/*
 
 # Shell history
