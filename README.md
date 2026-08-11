@@ -43,6 +43,21 @@ no KVM, remove the `--device=/dev/kvm` runArg from
 [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) and build with
 `-var accelerator=tcg` (or `make image ACCELERATOR=tcg`).
 
+### Headless (no VS Code)
+
+Use the same image as a plain container — build it once, then run a build:
+
+```sh
+docker build -t simbricks-image-harness .devcontainer
+docker run --rm -it --device /dev/kvm \
+  --group-add "$(getent group kvm | cut -d: -f3)" \
+  -v "$PWD:/work" -w /work simbricks-image-harness \
+  make image SOURCE_IMAGE=... SOURCE_CHECKSUM=...
+```
+
+Output lands in `./output-base`. `INPUT=<dir>` must be inside `$PWD`. No KVM: drop
+`--device`/`--group-add` and add `ACCELERATOR=tcg`.
+
 ## Build
 
 Via the Makefile:
