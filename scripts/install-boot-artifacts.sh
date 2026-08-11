@@ -12,7 +12,7 @@ kvm=$(dpkg-query -W -f='${Package}\n' 'linux-*-kvm' 2>/dev/null || true)
 [ -n "$kvm" ] && apt-get purge -y $kvm
 update-grub
 
-# Decompress the ELF vmlinux into /usr/lib/debug/boot for extract-boot-artifacts.sh.
+# Decompress the ELF vmlinux into /usr/lib/debug/boot for stage-boot-artifacts.sh.
 # extract-vmlinux comes from linux-headers; binutils + compressors do the unpacking.
 if [ "${WITH_VMLINUX:-true}" = true ]; then
     kver=$(ls /boot/vmlinuz-* | sed 's|.*/vmlinuz-||' | sort -V | tail -1)

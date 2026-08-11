@@ -28,14 +28,14 @@ without needing virt-tools at simulation time.
 
 - `packer` (with the qemu plugin; `make init` installs it)
 - a stock `qemu-system-x86_64` and `qemu-img`. KVM recommended.
-- `libguestfs-tools` (Debian/Ubuntu) or `guestfs-tools` (Fedora) for
-  `virt-copy-out` / `virt-ls`.
+- `tar` (boot artifacts are staged in the guest and downloaded over SSH — no
+  libguestfs/kernel packages needed on the host).
 
 ## Dev container
 
-`.devcontainer/` builds an image with all of the above (stock qemu, libguestfs,
-packer, make/git) via [.devcontainer/Dockerfile](.devcontainer/Dockerfile), so
-you can build without touching the host. Open the repo in VS Code and "Reopen in
+`.devcontainer/` builds an image with all of the above (stock qemu, packer,
+make/git) via [.devcontainer/Dockerfile](.devcontainer/Dockerfile), so you can
+build without touching the host. Open the repo in VS Code and "Reopen in
 Container".
 
 It passes the host's `/dev/kvm` through for accelerated builds. If your host has
@@ -106,9 +106,10 @@ packer build \
 ```
 
 `install-boot-artifacts.sh` runs first so components build against the generic
-kernel it installs; the ELF `vmlinux` it decompresses is copied out on the host by
-`scripts/extract-boot-artifacts.sh` (controlled by `-var install_vmlinux=`, default
-true). When you build a specialization on top of a prebuilt base image, drop the
+kernel it installs; the ELF `vmlinux` it decompresses is staged by
+`scripts/stage-boot-artifacts.sh` and downloaded from the guest over SSH
+(controlled by `-var install_vmlinux=`, default true). When you build a
+specialization on top of a prebuilt base image, drop the
 base scripts (`install-boot-artifacts.sh` included) from the list — the kernel and
 its `vmlinux` are already in the base, so there is nothing to redo.
 
@@ -230,7 +231,7 @@ scripts/install-boot-artifacts.sh base stage (guest): install the generic kernel
 scripts/install-base.sh     base stage: the packages you want in the image
 scripts/configure-boot.sh   base stage: trim the GRUB menu delay for fast boots
 scripts/install-guestinit.sh base stage: SimBricks guest payload runner (/dev/sdb -> guest/run.sh)
-scripts/extract-boot-artifacts.sh harness-owned (host): copy vmlinuz/initrd/vmlinux out
+scripts/stage-boot-artifacts.sh harness-owned (guest): tar vmlinuz/initrd/vmlinux for SSH download
 scripts/cleanup.sh          sanitize + shrink (runs last)
 kernel/                     optional: build + install a custom no-initrd kernel (boots under gem5; + timer patch)
 examples/gem5/install-m5.sh optional: install the gem5 m5 guest tool
