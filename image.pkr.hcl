@@ -46,12 +46,6 @@ variable "scripts" {
   description = "Guest provisioning scripts, run in order. Components plug in here."
 }
 
-variable "extract_script" {
-  type        = string
-  default     = ""
-  description = "Extraction script run on host to extract from image."
-}
-
 variable "input" {
   type        = string
   default     = ""
@@ -196,20 +190,38 @@ build {
     ]
   }
 
-  # 2. sanitize + shrink, last
+  # 2. stage boot artifacts (vmlinuz/initrd/vmlinux) into a tarball in the guest,
+  #    then download it over SSH — replaces libguestfs, so the host needs no kernel
+  #    or appliance packages. Runs before cleanup (which wipes /tmp).
+  provisioner "shell" {
+    script           = "scripts/stage-boot-artifacts.sh"
+    execute_command  = local.execute_command
+    environment_vars = [
+      "WITH_VMLINUX=${var.install_vmlinux}",
+    ]
+  }
+  provisioner "file" {
+    direction   = "download"
+    source      = "/tmp/boot-artifacts.tar.gz"
+    destination = "${var.output}/boot-artifacts.tar.gz"
+  }
+
+  # 3. sanitize + shrink, last
   provisioner "shell" {
     script          = "scripts/cleanup.sh"
     execute_command = local.execute_command
   }
 
-  # 3. optionally convert to raw, then extract boot artifacts (from the raw if made,
-  #    else straight from the qcow2 — libguestfs reads either).
+  # 4. unpack the downloaded artifacts into <output>/boot (optionally converting the
+  #    qcow2 to raw first). Only qemu-img + tar on the host — no kernel packages.
   post-processor "shell-local" {
-    inline = var.convert_raw ? [
-      "qemu-img convert -f qcow2 -O raw -S 4k ${var.output}/${var.name} ${var.output}/${var.name}.raw",
-      "WITH_VMLINUX=${var.install_vmlinux} sh ${var.extract_script} ${var.output}/${var.name}.raw ${var.output}"
-    ] : [
-      "WITH_VMLINUX=${var.install_vmlinux} sh ${var.extract_script} ${var.output}/${var.name} ${var.output}"
-    ]
+    inline = concat(
+      var.convert_raw ? ["qemu-img convert -f qcow2 -O raw -S 4k ${var.output}/${var.name} ${var.output}/${var.name}.raw"] : [],
+      [
+        "mkdir -p ${var.output}/boot",
+        "tar xzf ${var.output}/boot-artifacts.tar.gz -C ${var.output}/boot",
+        "rm -f ${var.output}/boot-artifacts.tar.gz",
+      ]
+    )
   }
 }
