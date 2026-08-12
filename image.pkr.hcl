@@ -1,6 +1,6 @@
 # SimBricks image harness — a packer template that turns a cloud image into a
 # base image. Guest actions are opaque scripts (var.base_scripts, var.scripts,
-# with a reboot between them). Output contract:
+# with an optional reboot between them). Output contract:
 #   <output>/<name>.raw     raw disk image
 #   <output>/boot/vmlinuz   distro kernel, bzImage
 #   <output>/boot/initrd    distro initramfs
@@ -55,14 +55,14 @@ variable "scripts" {
 
 variable "reboot_between" {
   type        = bool
-  default     = true
-  description = "Reboot the guest between base_scripts and scripts, so components build and load modules against the kernel the base stages installed. Set false to skip."
+  default     = false
+  description = "Reboot the guest between base_scripts and scripts, so components build and load modules against the kernel the base stages installed."
 }
 
 variable "input" {
   type        = string
   default     = ""
-  description = "Optional local tarball, unpacked to /tmp/input in the guest before the scripts run. `make image INPUT=<dir>` tars a directory for you. Empty = none."
+  description = "Optional local tarball, unpacked to /var/tmp/input in the guest before the scripts run. `make image INPUT=<dir>` tars a directory for you. Empty = none."
 }
 
 variable "disk_size"   {
@@ -172,7 +172,8 @@ source "qemu" "image" {
 build {
   sources = ["source.qemu.image"]
 
-  # 0. optional: upload + unpack a local input tarball to /tmp/input. `make image
+  # 0. optional: upload + unpack a local input tarball to /var/tmp/input, where it
+  #    stays (across the reboot) until cleanup.sh removes it. `make image
   #    INPUT=<dir>` tars the dir first (packer can't: the file source is checked
   #    before any provisioner runs). Via a tarball so symlinks aren't followed.
   dynamic "provisioner" {
@@ -180,14 +181,14 @@ build {
     labels   = ["file"]
     content {
       source      = provisioner.value
-      destination = "/tmp/input.tar.gz"
+      destination = "/var/tmp/input.tar.gz"
     }
   }
   dynamic "provisioner" {
     for_each = var.input == "" ? [] : [var.input]
     labels   = ["shell"]
     content {
-      inline = ["mkdir -p /tmp/input", "tar xzf /tmp/input.tar.gz -C /tmp/input"]
+      inline = ["mkdir -p /var/tmp/input", "tar xzf /var/tmp/input.tar.gz -C /var/tmp/input"]
     }
   }
 

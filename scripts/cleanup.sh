@@ -8,7 +8,9 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Leftover dhcp leases
 rm -f /var/lib/dhcp3/* /var/lib/dhcp/*
-rm -rf /tmp/*
+
+# scratch, and the uploaded build input
+rm -rf /tmp/* /var/tmp/input /var/tmp/input.tar.gz
 
 # apt caches / build deps
 apt-get -y autoremove --purge

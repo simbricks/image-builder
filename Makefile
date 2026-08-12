@@ -18,8 +18,8 @@ OUTPUT        ?= $(OUTPUT_DIR)/$(NAME)
 BASE_SCRIPTS  ?= scripts/install-boot-artifacts.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh
 EXTRA_SCRIPTS ?=
 
-# Reboot between the two, onto the kernel BASE_SCRIPTS installed; false to skip.
-REBOOT ?= true
+# Reboot between the two, onto the kernel BASE_SCRIPTS installed; off by default.
+REBOOT ?= false
 
 # Local dir made available at /tmp/input in the guest, tarred for upload (empty = off).
 INPUT ?=
