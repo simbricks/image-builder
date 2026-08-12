@@ -106,12 +106,12 @@ packer build \
   image.pkr.hcl
 ```
 
-Between the two lists the guest reboots, onto the kernel
-`install-boot-artifacts.sh` (or `kernel/install-kernel.sh`) just installed. So a
-component sees that kernel as `uname -r` and can build *and* load out-of-tree
-modules against it — without the reboot the build VM still runs the source
-image's kernel and only the on-disk `/lib/modules` has changed. Skip it with
-`-var reboot_between=false` (`make image REBOOT=false`).
+`-var reboot_between=true` (`make image REBOOT=true`) reboots the guest between
+the two lists, onto the kernel `install-boot-artifacts.sh` (or
+`kernel/install-kernel.sh`) just installed. A component then sees that kernel as
+`uname -r` and can build *and* load out-of-tree modules against it; without the
+reboot the build VM still runs the source image's kernel and only the on-disk
+`/lib/modules` has changed. Off by default.
 
 The ELF `vmlinux` the kernel stage decompresses is staged by
 `scripts/stage-boot-artifacts.sh` and downloaded from the guest over SSH
@@ -132,15 +132,17 @@ keeps builds reproducible when you pin the ref.
 
 For local, unpublished input (a working tree, patches, prebuilt blobs), upload it
 instead: `make image INPUT=<dir>` tars the directory and unpacks it to
-`/tmp/input` in the guest before the scripts run, where your script reads it.
+`/var/tmp/input` in the guest before the scripts run, where your script reads it.
+It stays there — across the reboot, if any — until `cleanup.sh` removes it.
 With plain packer, pass a tarball via `-var input=<file.tar.gz>` (packer can't
 tar it for you — the file source is checked before any provisioner runs).
 
 ### one-shot
 
-Base + all component scripts in a single build, with the reboot in between. With
-the Makefile, append component scripts via `EXTRA_SCRIPTS`:
-`make image EXTRA_SCRIPTS="path/to/another/install/script.sh"`.
+Base + all component scripts in a single build. With the Makefile, append
+component scripts via `EXTRA_SCRIPTS`:
+`make image EXTRA_SCRIPTS="path/to/another/install/script.sh"`. Add `REBOOT=true`
+if the component builds modules against a kernel a base stage installs.
 
 ### layered (reuse a base)
 
@@ -172,17 +174,17 @@ built in — outside packer, and it boots under gem5:
 
 ```sh
 make kernel                         # -> output/kernel/{vmlinux,linux-*.deb}
-make image NAME=gem5 INPUT=output/kernel \
+make image NAME=gem5 INPUT=output/kernel REBOOT=true \
   BASE_SCRIPTS="kernel/install-kernel.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh" \
   EXTRA_SCRIPTS="examples/gem5/install-m5.sh"
 ```
 
 `kernel/install-kernel.sh` replaces `install-boot-artifacts.sh`: it installs the
-built kernel handed in via `INPUT` (`/tmp/input`) instead of the generic one.
+built kernel handed in via `INPUT` (`/var/tmp/input`) instead of the generic one.
 Version, config and the gem5 timer patch live in `kernel/build-kernel.sh`.
-Because it is a base stage, the reboot puts the guest on that kernel before the
-component scripts run, so out-of-tree drivers (the Corundum `mqnic` stage above)
-build and load against it under `/lib/modules/<ver>/build`.
+`REBOOT=true` puts the guest on that kernel before the component scripts run, so
+out-of-tree drivers (the Corundum `mqnic` stage above) build and load against it
+under `/lib/modules/<ver>/build`.
 
 ## Using the output with the simulators
 
