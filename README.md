@@ -75,7 +75,7 @@ packer build \
   -var source_image=https://.../debian-13-genericcloud-amd64.qcow2 \
   -var source_checksum=file:https://.../SHA512SUMS \
   -var name=base -var output=output-base \
-  -var 'scripts=["scripts/install-boot-artifacts.sh","scripts/install-base.sh","scripts/configure-boot.sh","scripts/install-guestinit.sh"]' \
+  -var 'base_scripts=["scripts/install-boot-artifacts.sh","scripts/install-base.sh","scripts/configure-boot.sh","scripts/install-guestinit.sh"]' \
   image.pkr.hcl
 ```
 
@@ -87,31 +87,38 @@ qcow2 is converted to `<output>/<name>.raw` by default (`convert_raw=true`); set
 
 ## How components plug in
 
-The template runs an ordered list of opaque shell `scripts` in the guest, then
-runs `scripts/cleanup.sh`. The base stages — `install-boot-artifacts.sh` (install
+The template runs two ordered lists of opaque shell scripts in the guest — the
+base stages (`base_scripts`), then the components (`scripts`) — and finishes with
+`scripts/cleanup.sh`. The base stages are `install-boot-artifacts.sh` (install
 the generic kernel and decompress its `vmlinux`), `install-base.sh` (your
 software), `configure-boot.sh` (trim the GRUB delay), `install-guestinit.sh` (the
-SimBricks payload runner) — are just the first entries; a component (gem5,
-Corundum, ...) ships its own install script and you append it:
+SimBricks payload runner); a component (gem5, Corundum, ...) ships its own
+install script and goes in the second list:
 
 ```sh
 packer build \
   -var name=base -var output=output-base \
-  -var 'scripts=["scripts/install-boot-artifacts.sh",
-                 "scripts/install-base.sh",
-                 "scripts/configure-boot.sh",
-                 "scripts/install-guestinit.sh",
-                 "path/to/another/install/script.sh"]' \
+  -var 'base_scripts=["scripts/install-boot-artifacts.sh",
+                      "scripts/install-base.sh",
+                      "scripts/configure-boot.sh",
+                      "scripts/install-guestinit.sh"]' \
+  -var 'scripts=["path/to/another/install/script.sh"]' \
   image.pkr.hcl
 ```
 
-`install-boot-artifacts.sh` runs first so components build against the generic
-kernel it installs; the ELF `vmlinux` it decompresses is staged by
+Between the two lists the guest reboots, onto the kernel
+`install-boot-artifacts.sh` (or `kernel/install-kernel.sh`) just installed. So a
+component sees that kernel as `uname -r` and can build *and* load out-of-tree
+modules against it — without the reboot the build VM still runs the source
+image's kernel and only the on-disk `/lib/modules` has changed. Skip it with
+`-var reboot_between=false` (`make image REBOOT=false`).
+
+The ELF `vmlinux` the kernel stage decompresses is staged by
 `scripts/stage-boot-artifacts.sh` and downloaded from the guest over SSH
 (controlled by `-var install_vmlinux=`, default true). When you build a
-specialization on top of a prebuilt base image, drop the
-base scripts (`install-boot-artifacts.sh` included) from the list — the kernel and
-its `vmlinux` are already in the base, so there is nothing to redo.
+specialization on top of a prebuilt base image, clear `base_scripts`
+(`install-boot-artifacts.sh` included) — the kernel and its `vmlinux` are already
+in the base, so there is nothing to redo, and nothing to reboot onto.
 
 Because cleanup runs last, component scripts can pull in `build-essential`,
 `linux-headers-*`, etc.; cleanup removes them afterward.
@@ -131,8 +138,8 @@ tar it for you — the file source is checked before any provisioner runs).
 
 ### one-shot
 
-List base + all component scripts in a single build. With the
-Makefile, append component scripts via `EXTRA_SCRIPTS`:
+Base + all component scripts in a single build, with the reboot in between. With
+the Makefile, append component scripts via `EXTRA_SCRIPTS`:
 `make image EXTRA_SCRIPTS="path/to/another/install/script.sh"`.
 
 ### layered (reuse a base)
@@ -146,14 +153,15 @@ component runs:
 make image                                   # 1. build the base once -> output-base/base
 
 make image NAME=you-nre-image-name \                   # 2. specialize on top of it
-  SOURCE_IMAGE=output-base/base SOURCE_CHECKSUM=none \
+  SOURCE_IMAGE=output/base/base SOURCE_CHECKSUM=none \
   BASE_SCRIPTS= EXTRA_SCRIPTS="path/to/your/specific/install/script.sh"
 ```
 
 The base keeps the generic kernel + its `vmlinux` through cleanup, so the
-specialization reuses them and just extracts its own `boot/` artifacts.
-`SOURCE_CHECKSUM=none` is needed because the default checksum is for the cloud
-image, not your local base.
+specialization reuses them and just extracts its own `boot/` artifacts. It also
+boots that kernel from the start, so components build against it with no reboot
+needed. `SOURCE_CHECKSUM=none` is needed because the default checksum is for the
+cloud image, not your local base.
 
 ### Custom no-initrd kernel
 
@@ -172,8 +180,9 @@ make image NAME=gem5 INPUT=output/kernel \
 `kernel/install-kernel.sh` replaces `install-boot-artifacts.sh`: it installs the
 built kernel handed in via `INPUT` (`/tmp/input`) instead of the generic one.
 Version, config and the gem5 timer patch live in `kernel/build-kernel.sh`.
-Out-of-tree drivers (the Corundum `mqnic` stage above) then build against it under
-`/lib/modules/<ver>/build`.
+Because it is a base stage, the reboot puts the guest on that kernel before the
+component scripts run, so out-of-tree drivers (the Corundum `mqnic` stage above)
+build and load against it under `/lib/modules/<ver>/build`.
 
 ## Using the output with the simulators
 
