@@ -46,7 +46,7 @@ VARS = \
   -var input=$(INPUT_TAR) \
   -var name=$(NAME) -var output=$(OUTPUT) \
   -var 'base_scripts=$(call hcl_list,$(BASE_SCRIPTS))' \
-  -var 'scripts=$(call hcl_list,$(EXTRA_SCRIPTS))' \
+  -var 'extra_scripts=$(call hcl_list,$(EXTRA_SCRIPTS))' \
   -var reboot_between=$(REBOOT)
 
 .PHONY: image validate init clean pack-input kernel

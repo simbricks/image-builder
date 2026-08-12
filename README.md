@@ -88,12 +88,12 @@ qcow2 is converted to `<output>/<name>.raw` by default (`convert_raw=true`); set
 ## How components plug in
 
 The template runs two ordered lists of opaque shell scripts in the guest — the
-base stages (`base_scripts`), then the components (`scripts`) — and finishes with
-`scripts/cleanup.sh`. The base stages are `install-boot-artifacts.sh` (install
-the generic kernel and decompress its `vmlinux`), `install-base.sh` (your
-software), `configure-boot.sh` (trim the GRUB delay), `install-guestinit.sh` (the
-SimBricks payload runner); a component (gem5, Corundum, ...) ships its own
-install script and goes in the second list:
+base stages (`base_scripts`), then the components (`extra_scripts`) — and
+finishes with `scripts/cleanup.sh`. The base stages are
+`install-boot-artifacts.sh` (install the generic kernel and decompress its
+`vmlinux`), `install-base.sh` (your software), `configure-boot.sh` (trim the GRUB
+delay), `install-guestinit.sh` (the SimBricks payload runner); a component (gem5,
+Corundum, ...) ships its own install script and goes in the second list:
 
 ```sh
 packer build \
@@ -102,7 +102,7 @@ packer build \
                       "scripts/install-base.sh",
                       "scripts/configure-boot.sh",
                       "scripts/install-guestinit.sh"]' \
-  -var 'scripts=["path/to/another/install/script.sh"]' \
+  -var 'extra_scripts=["path/to/another/install/script.sh"]' \
   image.pkr.hcl
 ```
 
