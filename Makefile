@@ -18,6 +18,9 @@ OUTPUT        ?= $(OUTPUT_DIR)/$(NAME)
 BASE_SCRIPTS  ?= scripts/install-boot-artifacts.sh scripts/install-base.sh scripts/configure-boot.sh scripts/install-guestinit.sh
 EXTRA_SCRIPTS ?=
 
+# Reboot between the two, onto the kernel BASE_SCRIPTS installed; false to skip.
+REBOOT ?= true
+
 # Local dir made available at /tmp/input in the guest, tarred for upload (empty = off).
 INPUT ?=
 INPUT_TAR := $(and $(INPUT),/tmp/simbricks-image-input.tar.gz)
@@ -42,7 +45,9 @@ VARS = \
   -var convert_raw=$(CONVERT_RAW) \
   -var input=$(INPUT_TAR) \
   -var name=$(NAME) -var output=$(OUTPUT) \
-  -var 'scripts=$(call hcl_list,$(BASE_SCRIPTS) $(EXTRA_SCRIPTS))'
+  -var 'base_scripts=$(call hcl_list,$(BASE_SCRIPTS))' \
+  -var 'scripts=$(call hcl_list,$(EXTRA_SCRIPTS))' \
+  -var reboot_between=$(REBOOT)
 
 .PHONY: image validate init clean pack-input kernel
 
