@@ -1,5 +1,6 @@
 # SimBricks image harness — a packer template that turns a cloud image into a
-# base image. Guest actions are opaque scripts (var.scripts). Output contract:
+# base image. Guest actions are opaque scripts (var.base_scripts, var.scripts,
+# with a reboot between them). Output contract:
 #   <output>/<name>.raw     raw disk image
 #   <output>/boot/vmlinuz   distro kernel, bzImage
 #   <output>/boot/initrd    distro initramfs
@@ -40,10 +41,22 @@ variable "output" {
   description = "Output directory."
 }
 
+variable "base_scripts" {
+  type        = list(string)
+  default     = []
+  description = "Harness base stages (kernel, packages, boot config), run in order before the reboot."
+}
+
 variable "scripts" {
   type        = list(string)
   default     = []
-  description = "Guest provisioning scripts, run in order. Components plug in here."
+  description = "Guest provisioning scripts, run in order after base_scripts. Components plug in here."
+}
+
+variable "reboot_between" {
+  type        = bool
+  default     = true
+  description = "Reboot the guest between base_scripts and scripts, so components build and load modules against the kernel the base stages installed. Set false to skip."
 }
 
 variable "input" {
@@ -178,19 +191,47 @@ build {
     }
   }
 
-  # 1. base + component scripts, in order. install-boot-artifacts.sh is the first
-  #    base script, so it runs before components (they build against the generic
-  #    kernel it installs) and can be skipped like any base stage when reusing a
-  #    prebuilt base image (drop it from var.scripts / clear BASE_SCRIPTS).
-  provisioner "shell" {
-    scripts          = var.scripts
-    execute_command  = local.execute_command
-    environment_vars = [
-      "WITH_VMLINUX=${var.install_vmlinux}",
-    ]
+  # 1. base stages, in order; install-boot-artifacts.sh installs the kernel.
+  #    Empty when a layered build reuses a prebuilt base, and an empty script
+  #    list fails validation -- hence dynamic, here and below.
+  dynamic "provisioner" {
+    for_each = length(var.base_scripts) == 0 ? [] : [1]
+    labels   = ["shell"]
+    content {
+      scripts          = var.base_scripts
+      execute_command  = local.execute_command
+      environment_vars = [
+        "WITH_VMLINUX=${var.install_vmlinux}",
+      ]
+    }
   }
 
-  # 2. stage boot artifacts (vmlinuz/initrd/vmlinux) into a tarball in the guest,
+  # 2. reboot onto that kernel.
+  dynamic "provisioner" {
+    for_each = var.reboot_between && length(var.base_scripts) > 0 ? [1] : []
+    labels   = ["shell"]
+    content {
+      inline            = ["sudo reboot"]
+      expect_disconnect = true
+      skip_clean        = true
+    }
+  }
+
+  # 3. component scripts, in order, now running on it.
+  dynamic "provisioner" {
+    for_each = length(var.scripts) == 0 ? [] : [1]
+    labels   = ["shell"]
+    content {
+      scripts          = var.scripts
+      execute_command  = local.execute_command
+      pause_before     = var.reboot_between && length(var.base_scripts) > 0 ? "3s" : "0s"
+      environment_vars = [
+        "WITH_VMLINUX=${var.install_vmlinux}",
+      ]
+    }
+  }
+
+  # 4. stage boot artifacts (vmlinuz/initrd/vmlinux) into a tarball in the guest,
   #    then download it over SSH — replaces libguestfs, so the host needs no kernel
   #    or appliance packages. Runs before cleanup (which wipes /tmp).
   provisioner "shell" {
@@ -206,13 +247,13 @@ build {
     destination = "${var.output}/boot-artifacts.tar.gz"
   }
 
-  # 3. sanitize + shrink, last
+  # 5. sanitize + shrink, last
   provisioner "shell" {
     script          = "scripts/cleanup.sh"
     execute_command = local.execute_command
   }
 
-  # 4. unpack the downloaded artifacts into <output>/boot (optionally converting the
+  # 6. unpack the downloaded artifacts into <output>/boot (optionally converting the
   #    qcow2 to raw first). Only qemu-img + tar on the host — no kernel packages.
   post-processor "shell-local" {
     inline = concat(
