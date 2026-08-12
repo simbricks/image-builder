@@ -1,5 +1,5 @@
 # SimBricks image harness — a packer template that turns a cloud image into a
-# base image. Guest actions are opaque scripts (var.base_scripts, var.scripts,
+# base image. Guest actions are opaque scripts (var.base_scripts, var.extra_scripts,
 # with an optional reboot between them). Output contract:
 #   <output>/<name>.raw     raw disk image
 #   <output>/boot/vmlinuz   distro kernel, bzImage
@@ -47,7 +47,7 @@ variable "base_scripts" {
   description = "Harness base stages (kernel, packages, boot config), run in order before the reboot."
 }
 
-variable "scripts" {
+variable "extra_scripts" {
   type        = list(string)
   default     = []
   description = "Guest provisioning scripts, run in order after base_scripts. Components plug in here."
@@ -56,7 +56,7 @@ variable "scripts" {
 variable "reboot_between" {
   type        = bool
   default     = false
-  description = "Reboot the guest between base_scripts and scripts, so components build and load modules against the kernel the base stages installed."
+  description = "Reboot the guest between base_scripts and extra_scripts, so components build and load modules against the kernel the base stages installed."
 }
 
 variable "input" {
@@ -220,10 +220,10 @@ build {
 
   # 3. component scripts, in order, now running on it.
   dynamic "provisioner" {
-    for_each = length(var.scripts) == 0 ? [] : [1]
+    for_each = length(var.extra_scripts) == 0 ? [] : [1]
     labels   = ["shell"]
     content {
-      scripts          = var.scripts
+      scripts          = var.extra_scripts
       execute_command  = local.execute_command
       pause_before     = var.reboot_between && length(var.base_scripts) > 0 ? "3s" : "0s"
       environment_vars = [
